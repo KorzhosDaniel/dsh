@@ -30,6 +30,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	cursorStyle := tcell.StyleDefault.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
 	s.SetStyle(defStyle)
 
 	s.Clear()
@@ -82,6 +83,13 @@ func main() {
 				} else {
 					buf = ""
 				}
+				// Clear the cursor left on previous row
+				drawText(s,
+					pos["x1"].(int),
+					pos["y1"].(int),
+					defStyle,
+					" ",
+				)
 				// Update column position for dsh tag
 				TAG["y1"] = TAG["y1"].(int) + 1
 
@@ -104,6 +112,18 @@ func main() {
 				pos["x1"] = pos["x1"].(int) + 1
 				buf = buf + string(rune(ev.Rune()))
 			}
+			drawText(s,
+				pos["x1"].(int),
+				pos["y1"].(int),
+				cursorStyle,
+				" ",
+			)
+			drawText(s,
+				pos["x1"].(int)+1,
+				pos["y1"].(int),
+				defStyle,
+				" ",
+			)
 		}
 	}
 }
