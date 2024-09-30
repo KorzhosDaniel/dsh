@@ -7,19 +7,18 @@ import "log"
 
 import "github.com/gdamore/tcell"
 
+type CursorPos struct {
+	x int
+	y int
+}
+
 func main() {
 
 	var buf string = ""
 
-	pos := map[string]interface{}{
-		"x1": 7,
-		"y1": 0,
-	}
-
-	TAG := map[string]interface{}{
-		"label": "[dsh]$",
-		"x1":    0,
-		"y1":    0,
+	pos := CursorPos{
+		x: 7,
+		y: 0,
 	}
 
 	s, err := tcell.NewScreen()
@@ -30,16 +29,16 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
-	cursorStyle := tcell.StyleDefault.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
 	s.SetStyle(defStyle)
 
 	s.Clear()
 
-	drawText(s,
-		TAG["x1"].(int),
-		TAG["y1"].(int),
+	drawText(s, 0,
+		pos.y,
 		defStyle,
-		TAG["label"].(string))
+		"[dsh]$",
+	)
+	s.ShowCursor(pos.x, pos.y)
 
 	quit := func() {
 		s.Fini()
@@ -56,84 +55,113 @@ func main() {
 		case *tcell.EventResize:
 			s.Sync()
 		case *tcell.EventKey:
-			if ev.Key() == 127 {
-				if pos["x1"].(int) > 7 {
-					pos["x1"] = pos["x1"].(int) - 1
-
-					buf = buf[:len(buf)-1]
-
-					drawText(s,
-						pos["x1"].(int),
-						pos["y1"].(int),
-						defStyle,
-						" ",
-					)
+			drawText(s,
+				pos.x,
+				pos.y,
+				defStyle,
+				" ",
+			)
+			if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+				if pos.x > 7 {
+					charPos := pos.x - 7
+					rmChar(s, &pos, charPos, &buf)
 				}
 			} else if ev.Key() == tcell.KeyEnter {
 				if buf == "clear" {
 					s.Clear()
 					buf = ""
 
-					TAG["y1"] = -1
-
-					pos["y1"] = -1
-					pos["x1"] = 7
+					pos.y = -1
+					pos.x = 7
 				} else if buf == "exit" {
 					quit()
 				} else {
+					if buf != "" {
+						drawText(s,
+							0,
+							pos.y+1,
+							defStyle,
+							"dsh: command not found: "+buf,
+						)
+
+						pos.y++
+						pos.x = 7
+					}
 					buf = ""
 				}
-				// Clear the cursor left on previous row
-				drawText(s,
-					pos["x1"].(int),
-					pos["y1"].(int),
-					defStyle,
-					" ",
-				)
-				// Update column position for dsh tag
-				TAG["y1"] = TAG["y1"].(int) + 1
+				pos.y++
 
-				// Update column and reset row position for cursor
-				pos["y1"] = pos["y1"].(int) + 1
-				pos["x1"] = 7
-				drawText(s,
-					TAG["x1"].(int),
-					TAG["y1"].(int),
+				drawText(s, 0,
+					pos.y,
 					defStyle,
-					TAG["label"].(string),
+					"[dsh]$",
 				)
+			} else if ev.Key() == tcell.KeyRight {
+				if pos.x-7 < len(buf) {
+					pos.x++
+				}
+			} else if ev.Key() == tcell.KeyLeft {
+				if pos.x > 7 {
+					pos.x--
+				}
 			} else if ev.Rune() >= 32 && ev.Rune() <= 126 {
 				drawText(s,
-					pos["x1"].(int),
-					pos["y1"].(int),
+					pos.x,
+					pos.y,
 					defStyle,
 					string(rune(ev.Rune())),
 				)
-				pos["x1"] = pos["x1"].(int) + 1
+				pos.x++
 				buf = buf + string(rune(ev.Rune()))
 			}
-			drawText(s,
-				pos["x1"].(int),
-				pos["y1"].(int),
-				cursorStyle,
-				" ",
-			)
-			drawText(s,
-				pos["x1"].(int)+1,
-				pos["y1"].(int),
-				defStyle,
-				" ",
-			)
+			drawCursor(s, pos, buf)
 		}
 	}
 }
 
-func drawText(s tcell.Screen, x1, y1 int, style tcell.Style, text string) {
-	row := y1
-	col := x1
+func drawText(s tcell.Screen, x, y int, style tcell.Style, text string) {
+	row := y
+	col := x
 
 	for _, r := range []rune(text) {
 		s.SetContent(col, row, r, nil, style)
 		col++
+	}
+}
+
+func drawCursor(s tcell.Screen, pos CursorPos, buf string) {
+	defStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+
+	drawText(s,
+		7,
+		pos.y,
+		defStyle,
+		buf,
+	)
+	s.ShowCursor(pos.x, pos.y)
+}
+
+func rmChar(s tcell.Screen, pos *CursorPos, index int, buf *string) {
+	if len(*buf) == 0 || pos.x <= 7 {
+		return
+	}
+
+	*buf = (*buf)[:index-1] + (*buf)[index:]
+
+	width, _ := s.Size()
+	for x := 7; x < width; x++ {
+		s.SetContent(x, pos.y, ' ', nil, tcell.StyleDefault)
+	}
+
+	drawText(s,
+		7,
+		pos.y,
+		tcell.StyleDefault,
+		*buf,
+	)
+
+	pos.x--
+	if pos.x < 7 {
+		pos.x = 7
 	}
 }
